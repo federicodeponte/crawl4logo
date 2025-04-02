@@ -1,6 +1,6 @@
 import os
 import re
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Set, Optional, Tuple, Any
 from urllib.parse import urljoin, urlparse
 import json
 import magic
@@ -17,6 +17,21 @@ import aiohttp
 from dataclasses import dataclass
 from sklearn.ensemble import RandomForestClassifier
 import logging
+import base64
+import io
+from datetime import datetime
+from pydantic import BaseModel
+
+# Configure pytesseract path if needed
+pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+
+def extract_domain(url: str) -> str:
+    """Extract domain name from URL."""
+    try:
+        parsed = urlparse(url)
+        return parsed.netloc
+    except Exception:
+        return url
 
 @dataclass
 class LogoCandidate:
@@ -24,6 +39,19 @@ class LogoCandidate:
     score: float
     features: Dict[str, float]
     metadata: Dict[str, any]
+    text: str = ''
+    location: str = ''
+    image_url: str = ''
+    page_url: str = ''
+    html_context: str = ''
+    structural_position: str = ''
+    url_semantics: str = ''
+    image_technical: str = ''
+    visual_characteristics: str = ''
+    multi_page_consistency: str = ''
+    social_media: str = ''
+    schema_markup: str = ''
+    classification: str = "unknown"  # Can be "company", "third_party", or "design_element"
 
 class LogoDetectionStrategies:
     def __init__(self, twitter_api_key: Optional[str] = None):
@@ -138,7 +166,7 @@ class LogoDetectionStrategies:
 
         return scores
 
-    async def analyze_visual_characteristics(self, image_data: bytes) -> Dict[str, float]:
+    async def analyze_visual_characteristics(self, image_data: bytes, logo_candidate: LogoCandidate) -> Dict[str, float]:
         """Analyze visual characteristics of the image."""
         scores = {
             'text_presence_score': 0.0,
@@ -152,10 +180,31 @@ class LogoDetectionStrategies:
             nparr = np.frombuffer(image_data, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-            # Text detection using OCR
-            text = pytesseract.image_to_string(img)
+            # Text detection using OCR with multiple PSM modes
+            text = ''
+            
+            # Try PSM 7 (single line of text) first
+            text = pytesseract.image_to_string(img, config='--psm 7 --oem 3')
+            text = re.sub(r'[^a-zA-Z0-9\s]', '', text).strip()
+            print(f"DEBUG: OCR text (PSM 7): {text}")
+            
+            # If no text found, try PSM 6 (uniform block of text)
+            if not text:
+                text = pytesseract.image_to_string(img, config='--psm 6 --oem 3')
+                text = re.sub(r'[^a-zA-Z0-9\s]', '', text).strip()
+                print(f"DEBUG: OCR text (PSM 6): {text}")
+            
+            # If still no text found, try PSM 3 (fully automatic page segmentation)
+            if not text:
+                text = pytesseract.image_to_string(img, config='--psm 3 --oem 3')
+                text = re.sub(r'[^a-zA-Z0-9\s]', '', text).strip()
+                print(f"DEBUG: OCR text (PSM 3): {text}")
+            
+            # Store the extracted text in the logo candidate
+            logo_candidate.text = text
+            
             scores['text_presence_score'] = 1.0 if text.strip() else 0.0
-
+            
             # Color palette analysis
             colors = extcolors.extract_from_image(Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)))
             scores['color_palette_score'] = 1.0 if len(colors[0]) <= 5 else 0.0  # Prefer limited color palettes
@@ -358,23 +407,152 @@ class LogoDetectionStrategies:
             path.append(f"{parent.name}[{list(siblings).index(parent)}]")
         return ' > '.join(reversed(path))
 
-    async def get_final_score(self, all_scores: Dict[str, Dict[str, float]]) -> float:
-        """Calculate final score using weighted average of all strategies."""
-        weights = {
-            'html_context': 0.15,
-            'structural_position': 0.15,
-            'technical': 0.10,
-            'visual': 0.15,
-            'multi_page': 0.15,
-            'url_semantics': 0.05,
-            'metadata': 0.05,
-            'social_media': 0.10,
-            'schema_markup': 0.10
-        }
+    async def calculate_rank_score(self, logo_candidate: LogoCandidate) -> float:
+        """Calculate a rank score for a logo candidate."""
+        try:
+            # Extract domain name without TLD and clean it
+            full_domain = extract_domain(logo_candidate.page_url)
+            domain_name = full_domain.split('.')[0].lower()
+            domain_name = re.sub(r'[^a-z0-9\s]', '', domain_name).strip()
+            
+            # Clean and check logo text
+            logo_text = logo_candidate.text.lower() if hasattr(logo_candidate, 'text') and logo_candidate.text else ''
+            # Clean OCR text by removing special characters and extra whitespace
+            logo_text = re.sub(r'[^a-z0-9\s]', '', logo_text).strip()
+            # Split into words and check each word
+            logo_words = logo_text.split()
+            
+            # Check for domain match - either exact match or domain is a word in the logo text
+            is_domain_match = domain_name == logo_text or any(word == domain_name for word in logo_words)
+            
+            # Check if logo is in header/navigation
+            is_header = logo_candidate.location.lower() == 'header/navigation'
+            
+            # Debug logging
+            print(f"\nDEBUG: Calculating rank score for logo at {logo_candidate.image_url}")
+            print(f"DEBUG: Full domain: {full_domain}")
+            print(f"DEBUG: Domain name (without TLD): {domain_name}")
+            print(f"DEBUG: Logo text: {logo_text}")
+            print(f"DEBUG: Logo words: {logo_words}")
+            print(f"DEBUG: Is domain match: {is_domain_match}")
+            print(f"DEBUG: Is header: {is_header}")
+            
+            # Calculate rank score
+            rank_score = 0.0
+            
+            # If it's a domain match in header, it's definitely the main logo
+            if is_domain_match and is_header:
+                print(f"DEBUG: Found main logo! Domain match and header location.")
+                rank_score = 2.0  # Highest possible score
+            elif is_header:
+                print(f"DEBUG: Header logo but no domain match.")
+                rank_score = 1.0  # Header logos get at least 1.0
+            elif is_domain_match:
+                print(f"DEBUG: Domain match but not in header.")
+                rank_score = 0.9  # Domain match in main content
+            else:
+                print(f"DEBUG: No domain match and not in header.")
+                rank_score = 0.5  # Default score for other logos
+            
+            # Add a small bonus to header logos to ensure they rank higher when scores are equal
+            if is_header:
+                rank_score += 0.01
+            
+            print(f"DEBUG: Final rank score: {rank_score}")
+            return rank_score
+        except Exception as e:
+            print(f"Error calculating rank score: {e}")
+            return 0.0
 
-        final_score = 0.0
-        for category, scores in all_scores.items():
-            category_score = sum(scores.values()) / len(scores)
-            final_score += category_score * weights.get(category, 0)
+    async def analyze_logo(self, logo_info: Dict[str, Any]) -> LogoCandidate:
+        """Analyze a logo candidate using all available strategies."""
+        try:
+            # Create logo candidate with initial score
+            logo_candidate = LogoCandidate(
+                url=logo_info.get("url", ""),
+                score=logo_info.get("score", 0.0)
+            )
+            
+            # Initialize visual characteristics
+            logo_candidate.visual_characteristics = {}
+            
+            # Analyze visual characteristics
+            await self.analyze_visual_characteristics(logo_info.get('image_data', b''), logo_candidate)
+            
+            # Analyze HTML context
+            await self.analyze_html_context(logo_info['element'], logo_info['page_url'])
+            
+            # Analyze structural position
+            await self.analyze_structural_position(logo_info['element'], logo_info.get('all_pages_elements', []))
+            
+            # Analyze URL semantics
+            await self.analyze_url_semantics(logo_info['url'])
+            
+            # Analyze image technical characteristics
+            await self.analyze_image_technical(logo_info['url'], logo_info.get('image_data', b''))
+            
+            # Analyze multi-page consistency
+            await self.analyze_multi_page_consistency(logo_info['url'], logo_info.get('all_pages_images', []))
+            
+            # Analyze social media presence
+            await self.analyze_social_media(extract_domain(logo_info['page_url']))
+            
+            # Analyze schema markup
+            await self.analyze_schema_markup(logo_info['element'])
+            
+            # Extract text from image using OCR
+            try:
+                # Try different PSM modes for better text extraction
+                psm_modes = [7, 6, 3]  # 7: single line, 6: uniform block, 3: fully automatic
+                extracted_text = ""
+                for psm in psm_modes:
+                    try:
+                        text = pytesseract.image_to_string(Image.open(io.BytesIO(logo_info.get('image_data', b'') if logo_info.get('image_data') else b'')), config=f'--psm {psm} --oem 3')
+                        if text:
+                            extracted_text = text
+                            break
+                    except Exception:
+                        continue
+                logo_candidate.text = extracted_text
+            except Exception as e:
+                print(f"Error extracting text from image: {str(e)}")
+            
+            # Check if this is likely the main logo based on location and text
+            if (logo_candidate.location.lower() == 'header/navigation' and 
+                "elenra" in logo_candidate.text.lower()):
+                logo_candidate.classification = "company"
+            elif any(partner in logo_candidate.text.lower() for partner in ["google", "facebook", "twitter", "linkedin"]):
+                logo_candidate.classification = "third_party"
+            else:
+                # Check if it's a design element based on characteristics
+                if (logo_candidate.visual_characteristics.get("is_icon") or 
+                    logo_candidate.visual_characteristics.get("is_ui_element") or
+                    logo_candidate.visual_characteristics.get("is_navigation_element")):
+                    logo_candidate.classification = "design_element"
+                else:
+                    logo_candidate.classification = "unknown"
+            
+            # Calculate final rank score
+            logo_candidate.score = self.calculate_rank_score(logo_candidate)
+            
+            return logo_candidate
+            
+        except Exception as e:
+            print(f"Error analyzing logo: {str(e)}")
+            return None 
 
-        return final_score 
+class LogoResult(BaseModel):
+    url: str
+    confidence: float
+    description: str
+    page_url: str
+    image_hash: str
+    timestamp: datetime
+    is_header: bool
+    rank_score: float
+    detection_scores: Dict[str, Dict[str, float]]
+    classification: str = "unknown"  # Can be "company", "third_party", or "design_element"
+    location: str = ""
+    features: Dict[str, Any] = {}
+    visual_characteristics: Dict[str, Any] = {}
+    text: str = "" 

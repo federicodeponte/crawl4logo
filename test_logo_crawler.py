@@ -26,12 +26,22 @@ async def main():
     print("LogoCrawler instance created")
     
     # Crawl website and get ranked results
-    print("\nStarting crawl of www.enter.de...")
-    results = await crawler.crawl_website("https://www.enter.de")
+    print("\nStarting crawl of www.elenra.de...")
+    results = await crawler.crawl_website("https://www.elenra.de")
     
-    # Save results to JSON
-    output_data = [
-        {
+    # Process and classify results
+    processed_results = []
+    for result in results:
+        # Determine classification based on characteristics
+        if result.is_header and "elenra" in result.description.lower():
+            classification = "company"
+        elif any(partner in result.description.lower() for partner in ["google", "facebook", "twitter", "linkedin"]):
+            classification = "third_party"
+        else:
+            classification = "design_element"
+        
+        # Create new result with classification
+        processed_result = {
             "url": result.url,
             "confidence": result.confidence,
             "description": result.description,
@@ -40,54 +50,88 @@ async def main():
             "timestamp": result.timestamp.isoformat(),
             "is_header": result.is_header,
             "rank_score": result.rank_score,
-            "detection_scores": result.detection_scores
+            "detection_scores": result.detection_scores,
+            "classification": classification,
+            "location": "header/navigation" if result.is_header else "main content"
         }
-        for result in results
-    ]
+        processed_results.append(processed_result)
     
-    # Save to file
-    output_file = "results.json"
-    print(f"\nPreparing to save results...")
-    print(f"JSON data length: {len(json.dumps(output_data))} bytes")
-    print(f"Writing to file: {os.path.abspath(output_file)}")
+    print("\nFound logos (ranked by likelihood of being main company logo):")
+    print("\nCompany Logos:")
+    print("-" * 50)
+    for result in processed_results:
+        if result["classification"] == "company":
+            print(f"URL: {result['url']}")
+            print(f"Location: {result['location']}")
+            print(f"Confidence: {result['confidence']:.2f}")
+            print(f"Rank Score: {result['rank_score']:.2f}")
+            print(f"Description: {result['description']}")
+            print(f"Page URL: {result['page_url']}")
+            print("-" * 50)
     
-    # Ensure directory exists and is writable
-    directory = os.path.dirname(os.path.abspath(output_file))
-    print(f"Directory exists: {os.path.exists(directory)}")
-    print(f"Directory is writable: {os.access(directory, os.W_OK)}")
+    print("\nPartner/Third-party Logos:")
+    print("-" * 50)
+    for result in processed_results:
+        if result["classification"] == "third_party":
+            print(f"URL: {result['url']}")
+            print(f"Location: {result['location']}")
+            print(f"Confidence: {result['confidence']:.2f}")
+            print(f"Rank Score: {result['rank_score']:.2f}")
+            print(f"Description: {result['description']}")
+            print(f"Page URL: {result['page_url']}")
+            print("-" * 50)
     
-    # Write the file
-    print("File opened for writing")
-    with open(output_file, 'w') as f:
-        json.dump(output_data, f, indent=2)
-    print("Data written")
+    print("\nDesign Elements:")
+    print("-" * 50)
+    for result in processed_results:
+        if result["classification"] == "design_element":
+            print(f"URL: {result['url']}")
+            print(f"Location: {result['location']}")
+            print(f"Confidence: {result['confidence']:.2f}")
+            print(f"Rank Score: {result['rank_score']:.2f}")
+            print(f"Description: {result['description']}")
+            print(f"Page URL: {result['page_url']}")
+            print("-" * 50)
     
-    # Verify file was written
-    print("File flushed")
-    os.fsync(f.fileno())
-    print("File synced")
-    print("Results saved successfully")
+    print("\nResults Summary:")
+    print(f"Total logos found: {len(processed_results)}")
+    print(f"Company logos: {sum(1 for r in processed_results if r['classification'] == 'company')}")
+    print(f"Partner/Third-party logos: {sum(1 for r in processed_results if r['classification'] == 'third_party')}")
+    print(f"Design elements: {sum(1 for r in processed_results if r['classification'] == 'design_element')}")
+    
+    # Save results to JSON file
+    print("\nPreparing to save results...")
+    json_data = json.dumps(processed_results, indent=2)
+    print(f"JSON data length: {len(json_data)} bytes")
+    
+    # Save to results.json
+    print("Writing to file: results.json")
+    try:
+        with open("results.json", "w") as f:
+            f.write(json_data)
+        print("Results saved successfully to results.json")
+    except Exception as e:
+        print(f"Error saving results: {str(e)}")
     
     # Print summary of results
     print("\nResults Summary:")
-    print(f"Total logos found: {len(results)}")
+    print(f"Total logos found: {len(processed_results)}")
     
     # Sort by rank score
-    sorted_results = sorted(results, key=lambda x: x.rank_score, reverse=True)
+    sorted_results = sorted(processed_results, key=lambda x: x['rank_score'], reverse=True)
     
     print("\nTop 3 most likely logos:")
     for i, result in enumerate(sorted_results[:3], 1):
-        location = "header/navigation" if result.is_header else "main content"
+        location = "header/navigation" if result['is_header'] else "main content"
         print(f"\n{i}. Logo from {location}")
-        print(f"URL: {result.url}")
-        print(f"Confidence: {result.confidence}")
-        print(f"Rank Score: {result.rank_score}")
-        print(f"Description: {result.description}")
-        if result.detection_scores:
+        print(f"URL: {result['url']}")
+        print(f"Confidence: {result['confidence']:.2f}")
+        print(f"Rank Score: {result['rank_score']:.2f}")
+        print(f"Description: {result['description']}")
+        if result['detection_scores']:
             print("\nDetection Scores:")
-            for category, scores in result.detection_scores.items():
-                avg_score = sum(scores.values()) / len(scores)
-                print(f"- {category}: {avg_score:.2f}")
+            for score in result['detection_scores']:
+                print(f"- {score}")
     
     print("\nScript completed")
 

@@ -13,7 +13,7 @@ import io
 from pathlib import Path
 
 import aiohttp
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from PIL import Image
 from pydantic import BaseModel
 import re
