@@ -1,6 +1,7 @@
 import asyncio
 import os
-from typing import List, Dict, Optional, Set
+import csv
+from typing import List, Dict, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
 import hashlib
 from datetime import datetime, timedelta
@@ -18,6 +19,15 @@ from PIL import Image
 from pydantic import BaseModel
 import re
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+# Try to import rembg for background removal
+try:
+    from rembg import remove
+    REMBG_AVAILABLE = True
+except ImportError:
+    REMBG_AVAILABLE = False
+    print("Warning: rembg not installed. Background removal will be skipped.")
+    print("Install with: pip install rembg")
 
 from .logo_detection import LogoDetectionStrategies, LogoCandidate
 
@@ -90,6 +100,26 @@ class LogoCrawler:
         """Check if image dimensions are suitable for logo detection."""
         width, height = image.size
         return width >= self.min_width and height >= self.min_height
+
+    def remove_background(self, image: Image.Image) -> Image.Image:
+        """Remove background from image using rembg."""
+        if not REMBG_AVAILABLE:
+            return image
+        
+        try:
+            # Convert PIL image to bytes
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='PNG')
+            img_byte_arr = img_byte_arr.getvalue()
+            
+            # Remove background
+            output = remove(img_byte_arr)
+            
+            # Convert back to PIL image
+            return Image.open(io.BytesIO(output))
+        except Exception as e:
+            print(f"Background removal failed: {e}")
+            return image
 
     def extract_confidence_score(self, content: str) -> float:
         """Extract confidence score from gpt-4o-mini response using various patterns."""
@@ -432,6 +462,9 @@ class LogoCrawler:
                     if not self.is_valid_image_size(image):
                         return None
                     
+                    # Remove background by default
+                    image = self.remove_background(image)
+                    
                     buffered = io.BytesIO()
                     image.save(buffered, format="PNG")
                     image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
@@ -736,21 +769,12 @@ class LogoCrawler:
                     
                     # Analyze all images
                     results = []
-                    with Progress(
-                        SpinnerColumn(),
-                        TextColumn("[progress.description]{task.description}"),
-                        BarColumn(),
-                        TaskProgressColumn()
-                    ) as progress:
-                        task = progress.add_task("Crawling pages...", total=len(all_images))
-                        
-                        for image_url in all_images:
-                            result = await self.analyze_image(image_url, url)
-                            if result:
-                                # Mark if image is from header/nav
-                                result.is_header = image_url in header_images
-                                results.append(result)
-                            progress.advance(task)
+                    for image_url in all_images:
+                        result = await self.analyze_image(image_url, url)
+                        if result:
+                            # Mark if image is from header/nav
+                            result.is_header = image_url in header_images
+                            results.append(result)
                     
                     print(f"Crawl completed. Found {len(results)} results\n")
                     
@@ -778,4 +802,247 @@ class LogoCrawler:
             return []
         except Exception as e:
             print(f"Unexpected error: {e}")
-            return [] 
+            return []
+
+    def detect_url_column(self, csv_file_path: str) -> Tuple[str, List[str]]:
+        """
+        Automatically detect the URL column in a CSV file.
+        
+        Args:
+            csv_file_path: Path to the CSV file
+            
+        Returns:
+            Tuple of (column_name, list_of_urls)
+        """
+        possible_url_headers = [
+            'url', 'website', 'site', 'link', 'domain', 'company url', 
+            'website url', 'site url', 'company website', 'company site',
+            'web', 'webpage', 'page', 'address', 'homepage'
+        ]
+        
+        with open(csv_file_path, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            headers = reader.fieldnames
+            
+            if not headers:
+                raise ValueError("CSV file has no headers")
+            
+            # Find the URL column
+            url_column = None
+            for header in headers:
+                if header.lower().strip() in possible_url_headers:
+                    url_column = header
+                    break
+            
+            if not url_column:
+                # If no exact match, try partial matches
+                for header in headers:
+                    header_lower = header.lower().strip()
+                    for possible in possible_url_headers:
+                        if possible in header_lower or header_lower in possible:
+                            url_column = header
+                            break
+                    if url_column:
+                        break
+            
+            if not url_column:
+                raise ValueError(
+                    f"Could not detect URL column. Available columns: {headers}. "
+                    f"Please ensure one of these columns contains URLs: {possible_url_headers}"
+                )
+            
+            # Extract URLs from the detected column
+            urls = []
+            for row in reader:
+                url = row[url_column].strip()
+                if url and url.lower() not in ['', 'nan', 'none', 'null']:
+                    # Ensure URL has protocol
+                    if not url.startswith(('http://', 'https://')):
+                        url = 'https://' + url
+                    urls.append(url)
+            
+            return url_column, urls
+
+    async def process_csv_batch(self, csv_file_path: str, output_dir: str = "results", confirm_header: bool = True) -> Dict[str, List[LogoResult]]:
+        """
+        Process a CSV file containing URLs and crawl each website for logos.
+        
+        Args:
+            csv_file_path: Path to the CSV file containing URLs
+            output_dir: Directory to save individual results
+            confirm_header: Whether to confirm the detected URL column with user
+            
+        Returns:
+            Dictionary mapping URLs to their logo results
+        """
+        print(f"Processing CSV file: {csv_file_path}")
+        
+        # Detect URL column
+        url_column, urls = self.detect_url_column(csv_file_path)
+        
+        if confirm_header:
+            print(f"\nDetected URL column: '{url_column}'")
+            print(f"Found {len(urls)} URLs to process:")
+            for i, url in enumerate(urls[:5], 1):  # Show first 5 URLs
+                print(f"  {i}. {url}")
+            if len(urls) > 5:
+                print(f"  ... and {len(urls) - 5} more")
+            
+            response = input("\nProceed with this column? (y/n): ").lower().strip()
+            if response not in ['y', 'yes']:
+                print("Processing cancelled.")
+                return {}
+        
+        # Create output directory
+        output_path = Path(output_dir)
+        output_path.mkdir(exist_ok=True)
+        
+        # Process each URL
+        all_results = {}
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%")
+        ) as progress:
+            task = progress.add_task("Processing websites...", total=len(urls))
+            
+            for url in urls:
+                try:
+                    progress.update(task, description=f"Processing {url}")
+                    
+                    # Crawl the website
+                    results = await self.crawl_website(url)
+                    
+                    # Save individual results
+                    if results:
+                        # Create filename from URL
+                        domain = urlparse(url).netloc.replace('.', '_')
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        filename = f"{domain}_{timestamp}.json"
+                        filepath = output_path / filename
+                        
+                        # Create images subdirectory for background-removed logos
+                        images_dir = output_path / f"{domain}_{timestamp}_images"
+                        images_dir.mkdir(exist_ok=True)
+                        
+                        # Convert results to JSON format and save background-removed images
+                        results_dict = []
+                        for i, result in enumerate(results):
+                            # Save background-removed image
+                            try:
+                                # Download the original image
+                                async with aiohttp.ClientSession() as session:
+                                    async with session.get(result.url) as response:
+                                        if response.status == 200:
+                                            image_data = await response.read()
+                                            image = Image.open(io.BytesIO(image_data))
+                                            
+                                            # Remove background
+                                            image_no_bg = self.remove_background(image)
+                                            
+                                            # Save background-removed image
+                                            image_filename = f"logo_{i+1}_{result.confidence:.2f}.png"
+                                            image_path = images_dir / image_filename
+                                            image_no_bg.save(image_path, "PNG")
+                                            
+                                            # Add image path to result
+                                            result_dict = {
+                                                "url": result.url,
+                                                "confidence": result.confidence,
+                                                "description": result.description,
+                                                "page_url": result.page_url,
+                                                "image_hash": result.image_hash,
+                                                "timestamp": result.timestamp.isoformat(),
+                                                "rank_score": result.rank_score,
+                                                "detection_scores": result.detection_scores,
+                                                "is_header": result.is_header,
+                                                "background_removed_image": str(image_path)
+                                            }
+                                        else:
+                                            # If image download fails, save without background-removed image
+                                            result_dict = {
+                                                "url": result.url,
+                                                "confidence": result.confidence,
+                                                "description": result.description,
+                                                "page_url": result.page_url,
+                                                "image_hash": result.image_hash,
+                                                "timestamp": result.timestamp.isoformat(),
+                                                "rank_score": result.rank_score,
+                                                "detection_scores": result.detection_scores,
+                                                "is_header": result.is_header,
+                                                "background_removed_image": None
+                                            }
+                            except Exception as e:
+                                print(f"Warning: Could not save background-removed image for {result.url}: {e}")
+                                result_dict = {
+                                    "url": result.url,
+                                    "confidence": result.confidence,
+                                    "description": result.description,
+                                    "page_url": result.page_url,
+                                    "image_hash": result.image_hash,
+                                    "timestamp": result.timestamp.isoformat(),
+                                    "rank_score": result.rank_score,
+                                    "detection_scores": result.detection_scores,
+                                    "is_header": result.is_header,
+                                    "background_removed_image": None
+                                }
+                            
+                            results_dict.append(result_dict)
+                        
+                        # Save to file
+                        with open(filepath, 'w') as f:
+                            json.dump(results_dict, f, indent=2)
+                        
+                        print(f"\n✅ {url}: Found {len(results)} logos, saved to {filepath}")
+                        print(f"📁 Background-removed images saved to: {images_dir}")
+                    else:
+                        print(f"\n❌ {url}: No logos found")
+                    
+                    all_results[url] = results
+                    
+                except Exception as e:
+                    print(f"\n❌ {url}: Error - {e}")
+                    all_results[url] = []
+                
+                progress.advance(task)
+        
+        # Create summary report
+        summary_file = output_path / "batch_summary.json"
+        summary = {
+            "processed_at": datetime.now().isoformat(),
+            "csv_file": csv_file_path,
+            "url_column": url_column,
+            "total_urls": len(urls),
+            "successful_crawls": sum(1 for results in all_results.values() if results),
+            "total_logos_found": sum(len(results) for results in all_results.values()),
+            "results": {
+                url: {
+                    "logo_count": len(results),
+                    "all_logos": [
+                        {
+                            "url": result.url,
+                            "confidence": result.confidence,
+                            "rank_score": result.rank_score,
+                            "description": result.description,
+                            "is_header": result.is_header
+                        }
+                        for result in results
+                    ] if results else []
+                }
+                for url, results in all_results.items()
+            }
+        }
+        
+        with open(summary_file, 'w') as f:
+            json.dump(summary, f, indent=2)
+        
+        print(f"\n🎉 Batch processing complete!")
+        print(f"📊 Summary: {summary['successful_crawls']}/{summary['total_urls']} websites processed successfully")
+        print(f"📁 Results saved to: {output_path}")
+        print(f"📋 Summary report: {summary_file}")
+        print(f"📸 Background-removed images saved in subdirectories")
+        
+        return all_results 
