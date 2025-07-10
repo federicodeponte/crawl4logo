@@ -931,6 +931,11 @@ class LogoCrawler:
                         # Convert results to JSON format and save background-removed images
                         results_dict = []
                         for i, result in enumerate(results):
+                            # Only process images with confidence score > 0.8
+                            if result.confidence <= 0.8:
+                                print(f"Skipping logo with low confidence ({result.confidence}): {result.url}")
+                                continue
+                            
                             # Save background-removed image
                             try:
                                 # Download the original image
@@ -948,7 +953,11 @@ class LogoCrawler:
                                             image_path = images_dir / image_filename
                                             image_no_bg.save(image_path, "PNG")
                                             
-                                            # Add image path to result
+                                            # Create URL for background-removed image
+                                            # Convert file path to URL format (assuming local server or file:// protocol)
+                                            bg_image_url = f"file://{image_path.absolute()}"
+                                            
+                                            # Add image path and URL to result
                                             result_dict = {
                                                 "url": result.url,
                                                 "confidence": result.confidence,
@@ -959,7 +968,8 @@ class LogoCrawler:
                                                 "rank_score": result.rank_score,
                                                 "detection_scores": result.detection_scores,
                                                 "is_header": result.is_header,
-                                                "background_removed_image": str(image_path)
+                                                "background_removed_image_path": str(image_path),
+                                                "background_removed_image_url": bg_image_url
                                             }
                                         else:
                                             # If image download fails, save without background-removed image
@@ -973,7 +983,8 @@ class LogoCrawler:
                                                 "rank_score": result.rank_score,
                                                 "detection_scores": result.detection_scores,
                                                 "is_header": result.is_header,
-                                                "background_removed_image": None
+                                                "background_removed_image_path": None,
+                                                "background_removed_image_url": None
                                             }
                             except Exception as e:
                                 print(f"Warning: Could not save background-removed image for {result.url}: {e}")
@@ -987,7 +998,8 @@ class LogoCrawler:
                                     "rank_score": result.rank_score,
                                     "detection_scores": result.detection_scores,
                                     "is_header": result.is_header,
-                                    "background_removed_image": None
+                                    "background_removed_image_path": None,
+                                    "background_removed_image_url": None
                                 }
                             
                             results_dict.append(result_dict)
@@ -996,8 +1008,11 @@ class LogoCrawler:
                         with open(filepath, 'w') as f:
                             json.dump(results_dict, f, indent=2)
                         
-                        print(f"\n✅ {url}: Found {len(results)} logos, saved to {filepath}")
-                        print(f"📁 Background-removed images saved to: {images_dir}")
+                        print(f"\n✅ {url}: Found {len(results)} logos, saved {len(results_dict)} high-confidence logos (>0.8) to {filepath}")
+                        if results_dict:
+                            print(f"📁 Background-removed images saved to: {images_dir}")
+                        else:
+                            print(f"⚠️  No high-confidence logos found (all below 0.8 threshold)")
                     else:
                         print(f"\n❌ {url}: No logos found")
                     
