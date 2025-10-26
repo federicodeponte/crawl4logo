@@ -20,23 +20,19 @@ from pydantic import BaseModel
 import re
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
-# Try to import rembg for background removal
+# Try to import rembg for background removal (optional feature - not required)
 try:
     from rembg import remove
     REMBG_AVAILABLE = True
 except ImportError:
     REMBG_AVAILABLE = False
-    print("Warning: rembg not installed. Background removal will be skipped.")
-    print("Install with: pip install rembg")
 
-# Try to import supabase for cloud storage
+# Try to import supabase for cloud storage (optional feature - not required)
 try:
     from supabase import create_client, Client
     SUPABASE_AVAILABLE = True
 except ImportError:
     SUPABASE_AVAILABLE = False
-    print("Warning: supabase not installed. Cloud storage will be skipped.")
-    print("Install with: pip install supabase")
 
 from .logo_detection import LogoDetectionStrategies, LogoCandidate
 
@@ -87,7 +83,7 @@ class CloudStorage:
                 print(f"⚠️  Failed to initialize Supabase: {e}")
                 self.client = None
         else:
-            print("⚠️  Supabase not configured - images will be stored locally only")
+            pass  # Supabase not configured (optional feature)
     
     async def upload_image(self, image_data: bytes, filename: str) -> Optional[str]:
         """Upload image to cloud storage and return public URL."""
@@ -316,7 +312,7 @@ class LogoCrawler:
                     
                     try:
                         result = await response.json()
-                        print(f"API Response: {json.dumps(result, indent=2)}")
+                        # print(f"API Response: {json.dumps(result, indent=2)}")  # Verbose - commented out
                     except json.JSONDecodeError as e:
                         print(f"Error decoding JSON response: {e}")
                         response_text = await response.text()
@@ -340,7 +336,7 @@ class LogoCrawler:
                         return None
                     
                     content = result['choices'][0]['message']['content']
-                    print(f"Content from API: {content}")
+                    # print(f"Content from API: {content}")  # Verbose - commented out
                     
                     if content.lower() == "null":
                         print("Content is 'null', skipping image")
@@ -348,11 +344,11 @@ class LogoCrawler:
                     
                     # Extract confidence score using the new method
                     confidence = self.extract_confidence_score(content)
-                    print(f"Extracted confidence score: {confidence}")
-                    
+                    # print(f"Extracted confidence score: {confidence}")  # Verbose - commented out
+
                     # Extract description using the new method
                     description = self.extract_description(content)
-                    print(f"Extracted description: {description}")
+                    # print(f"Extracted description: {description}")  # Verbose - commented out
                     
                     # Get additional detection scores
                     detection_scores = {}
@@ -440,7 +436,7 @@ class LogoCrawler:
                     
                     try:
                         result = await response.json()
-                        print(f"API Response: {json.dumps(result, indent=2)}")
+                        # print(f"API Response: {json.dumps(result, indent=2)}")  # Verbose - commented out
                     except json.JSONDecodeError as e:
                         print(f"Error decoding JSON response: {e}")
                         response_text = await response.text()
@@ -464,7 +460,7 @@ class LogoCrawler:
                         return None
                     
                     content = result['choices'][0]['message']['content']
-                    print(f"Content from API: {content}")
+                    # print(f"Content from API: {content}")  # Verbose - commented out
                     
                     if content.lower() == "null":
                         print("Content is 'null', skipping image")
@@ -472,11 +468,11 @@ class LogoCrawler:
                     
                     # Extract confidence score using the new method
                     confidence = self.extract_confidence_score(content)
-                    print(f"Extracted confidence score: {confidence}")
-                    
+                    # print(f"Extracted confidence score: {confidence}")  # Verbose - commented out
+
                     # Extract description using the new method
                     description = self.extract_description(content)
-                    print(f"Extracted description: {description}")
+                    # print(f"Extracted description: {description}")  # Verbose - commented out
                     
                     # Get additional detection scores
                     detection_scores = {}
@@ -868,20 +864,30 @@ class LogoCrawler:
                     print(f"Crawl completed. Found {len(results)} results\n")
                     
                     if results:
-                        # Rank the logos
-                        ranked_results = await self.rank_logos(results)
-                        
-                        print("\nFound logos (ranked by likelihood of being main company logo):\n")
+                        # Deduplicate by image hash and rank by confidence
+                        seen_hashes = set()
+                        unique_results = []
+                        for result in results:
+                            if result.image_hash not in seen_hashes:
+                                seen_hashes.add(result.image_hash)
+                                # Set rank score: header logos get a boost, otherwise use confidence
+                                result.rank_score = (result.confidence * 1.2) if result.is_header else result.confidence
+                                unique_results.append(result)
+
+                        # Sort by rank score (descending)
+                        ranked_results = sorted(unique_results, key=lambda x: x.rank_score, reverse=True)
+
+                        print(f"\nFound {len(ranked_results)} unique logo(s) (ranked by likelihood):\n")
                         for result in ranked_results:
                             location = "header/navigation" if result.is_header else "main content"
                             print(f"URL: {result.url}")
                             print(f"Location: {location}")
                             print(f"Confidence: {result.confidence}")
-                            print(f"Rank Score: {result.rank_score}")
+                            print(f"Rank Score: {result.rank_score:.2f}")
                             print(f"Description: {result.description}")
                             print(f"Page URL: {result.page_url}")
                             print("-" * 50 + "\n")
-                        
+
                         return ranked_results
                     
                     return []
