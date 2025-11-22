@@ -88,8 +88,16 @@ async def main():
     print(f"Testing {len(COMPANIES)} companies...")
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Initialize crawler with API key
-    api_key = "***REMOVED***"
+    # Initialize crawler with API key from environment variable
+    import os
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        print("\n❌ Error: OPENAI_API_KEY environment variable not set")
+        print("Please set your OpenAI API key:")
+        print("  export OPENAI_API_KEY='your-api-key-here'")
+        print("\nGet your API key from: https://platform.openai.com/")
+        return
 
     try:
         crawler = LogoCrawler(api_key=api_key)

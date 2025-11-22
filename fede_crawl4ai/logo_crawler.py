@@ -34,7 +34,7 @@ try:
 except ImportError:
     SUPABASE_AVAILABLE = False
 
-from .logo_detection import LogoDetectionStrategies, LogoCandidate
+# Removed: logo_detection module (dead code - detection strategies were never executed)
 
 def allowSelfSignedHttps(allowed):
     if allowed and not os.environ.get('PYTHONHTTPSVERIFY', '') and getattr(ssl, '_create_unverified_context', None):
@@ -111,17 +111,16 @@ class CloudStorage:
             return None
 
 class LogoCrawler:
-    def __init__(self, api_key: Optional[str] = None, twitter_api_key: Optional[str] = None, 
-                 use_azure: bool = False, supabase_url: Optional[str] = None, 
+    def __init__(self, api_key: Optional[str] = None,
+                 use_azure: bool = False, supabase_url: Optional[str] = None,
                  supabase_key: Optional[str] = None):
         """
         Initialize the LogoCrawler.
-        
+
         Args:
             api_key: OpenAI API key (Azure or regular). Required for logo detection.
                      - For Azure OpenAI: Get your API key from https://portal.azure.com/
                      - For regular OpenAI: Get your API key from https://platform.openai.com/
-            twitter_api_key: Optional Twitter API key for social media analysis
             use_azure: Set to True if using Azure OpenAI, False for regular OpenAI (default: False)
             supabase_url: Optional Supabase URL for cloud storage of background-removed images
             supabase_key: Optional Supabase key for cloud storage
@@ -135,9 +134,8 @@ class LogoCrawler:
         self.api_key = api_key
         self.use_azure = use_azure
         
-        # Initialize image cache, detection strategies, and cloud storage
+        # Initialize image cache and cloud storage
         self.image_cache = ImageCache()
-        self.detection_strategies = LogoDetectionStrategies(twitter_api_key)
         self.cloud_storage = CloudStorage(supabase_url, supabase_key)
         
         # Minimum image dimensions
@@ -350,25 +348,9 @@ class LogoCrawler:
                     description = self.extract_description(content)
                     # print(f"Extracted description: {description}")  # Verbose - commented out
                     
-                    # Get additional detection scores
-                    detection_scores = {}
-                    if html_element and page_html:
-                        image_data = base64.b64decode(image_base64)
-                        domain = urlparse(page_url).netloc
-                        
-                        detection_scores['html_context'] = await self.detection_strategies.analyze_html_context(html_element, page_url)
-                        detection_scores['structural_position'] = await self.detection_strategies.analyze_structural_position(html_element, [])
-                        detection_scores['technical'] = await self.detection_strategies.analyze_image_technical(image_url, image_data)
-                        detection_scores['visual'] = await self.detection_strategies.analyze_visual_characteristics(image_data)
-                        detection_scores['url_semantics'] = await self.detection_strategies.analyze_url_semantics(image_url)
-                        detection_scores['metadata'] = await self.detection_strategies.analyze_metadata(image_data)
-                        detection_scores['social_media'] = await self.detection_strategies.analyze_social_media(domain)
-                        detection_scores['schema_markup'] = await self.detection_strategies.analyze_schema_markup(page_html)
-                        
-                        # Calculate rank score
-                        rank_score = await self.detection_strategies.get_final_score(detection_scores)
-                    else:
-                        rank_score = confidence
+                    # Use GPT-4o-mini confidence as rank score (simple, proven approach)
+                    rank_score = confidence
+                    detection_scores = {}  # Keep for backward compatibility with JSON output
                     
                     return LogoResult(
                         url=image_url,
@@ -474,25 +456,9 @@ class LogoCrawler:
                     description = self.extract_description(content)
                     # print(f"Extracted description: {description}")  # Verbose - commented out
                     
-                    # Get additional detection scores
-                    detection_scores = {}
-                    if html_element and page_html:
-                        image_data = base64.b64decode(image_base64)
-                        domain = urlparse(page_url).netloc
-                        
-                        detection_scores['html_context'] = await self.detection_strategies.analyze_html_context(html_element, page_url)
-                        detection_scores['structural_position'] = await self.detection_strategies.analyze_structural_position(html_element, [])
-                        detection_scores['technical'] = await self.detection_strategies.analyze_image_technical(image_url, image_data)
-                        detection_scores['visual'] = await self.detection_strategies.analyze_visual_characteristics(image_data)
-                        detection_scores['url_semantics'] = await self.detection_strategies.analyze_url_semantics(image_url)
-                        detection_scores['metadata'] = await self.detection_strategies.analyze_metadata(image_data)
-                        detection_scores['social_media'] = await self.detection_strategies.analyze_social_media(domain)
-                        detection_scores['schema_markup'] = await self.detection_strategies.analyze_schema_markup(page_html)
-                        
-                        # Calculate rank score
-                        rank_score = await self.detection_strategies.get_final_score(detection_scores)
-                    else:
-                        rank_score = confidence
+                    # Use GPT-4o-mini confidence as rank score (simple, proven approach)
+                    rank_score = confidence
+                    detection_scores = {}  # Keep for backward compatibility with JSON output
                     
                     return LogoResult(
                         url=image_url,

@@ -19,10 +19,26 @@ wheels/
 .installed.cfg
 *.egg
 .env
+.env.local
 .venv
 env/
 venv/
 ENV/
+test_env/
 .DS_Store
+
+# Test results and output files
 results.json
-output/ 
+*_results.json
+test_results_*.json
+output/
+debug_output.txt
+
+# API keys and secrets
+*.key
+credentials.*
+secrets.*
+
+# Database files
+*.db
+*.sqlite 
