@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2025-11-22
+
+### Fixed
+- Fixed macOS CI cairo library loading by adding PKG_CONFIG_PATH and DYLD_LIBRARY_PATH
+- Applied black code formatting to all Python files
+
 ## [0.1.1] - 2025-11-22
 
 ### Fixed
