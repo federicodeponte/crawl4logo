@@ -700,7 +700,8 @@ class LogoCrawler:
                             # Skip non-image URLs
                             if not any(
                                 img_url.lower().endswith(ext)
-                                for ext in [".jpg", ".jpeg", ".png", ".gif", ".svg"]):
+                                for ext in [".jpg", ".jpeg", ".png", ".gif", ".svg"]
+                            ):
                                 continue
 
                             # Analyze image
@@ -869,7 +870,10 @@ class LogoCrawler:
         if self.use_azure:
             headers = {"Content-Type": "application/json", "api-key": self.api_key}
         else:
-            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            }
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -955,9 +959,12 @@ class LogoCrawler:
 
                         # Sort by rank score (descending)
                         ranked_results = sorted(
-                            unique_results, key=lambda x: x.rank_score, reverse=True)
+                            unique_results, key=lambda x: x.rank_score, reverse=True
+                        )
 
-                        logger.info(f"\nFound {len(ranked_results)} unique logo(s) (ranked by likelihood):\n")
+                        logger.info(
+                            f"\nFound {len(ranked_results)} unique logo(s) (ranked by likelihood):\n"
+                        )
                         for result in ranked_results:
                             location = "header/navigation" if result.is_header else "main content"
                             logger.info(f"URL: {result.url}")
@@ -1224,14 +1231,17 @@ class LogoCrawler:
                         with open(filepath, "w") as f:
                             json.dump(results_dict, f, indent=2)
 
-                        logger.info(f"\n✅ {url}: Found {len(results)} logos, saved {len(results_dict)} company logos (>0.8 confidence) to {filepath}")
+                        logger.info(
+                            f"\n✅ {url}: Found {len(results)} logos, saved {len(results_dict)} company logos (>0.8 confidence) to {filepath}"
+                        )
                         if results_dict:
                             logger.info(f"📁 Background-removed images saved to: {images_dir}")
                             if any(r.get("cloud_storage_url") for r in results_dict):
                                 logger.info(f"☁️  Images uploaded to cloud storage")
                         else:
                             logger.info(
-                                f"⚠️  No company logos found (all below 0.8 threshold or non-company logos)")
+                                f"⚠️  No company logos found (all below 0.8 threshold or non-company logos)"
+                            )
                     else:
                         logger.info(f"\n❌ {url}: No logos found")
 

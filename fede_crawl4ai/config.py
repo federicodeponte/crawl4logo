@@ -1,4 +1,5 @@
 """Configuration management for crawl4logo."""
+
 import os
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
@@ -10,7 +11,7 @@ class LogoCrawlerConfig(BaseModel):
     # API Configuration
     api_key: str = Field(..., description="OpenAI API key (Azure or regular)")
 
-    @field_validator('api_key')
+    @field_validator("api_key")
     @classmethod
     def validate_api_key(cls, v: str) -> str:
         """Validate that API key is not empty."""
@@ -20,6 +21,7 @@ class LogoCrawlerConfig(BaseModel):
                 "Please provide your API key when initializing LogoCrawler."
             )
         return v
+
     use_azure: bool = Field(default=False, description="Use Azure OpenAI instead of regular OpenAI")
     azure_endpoint: Optional[str] = Field(default=None, description="Azure OpenAI endpoint URL")
     azure_deployment: str = Field(default="gpt-4o-mini", description="Azure OpenAI deployment name")
@@ -30,7 +32,9 @@ class LogoCrawlerConfig(BaseModel):
     min_height: int = Field(default=32, description="Minimum image height in pixels")
 
     # Filtering
-    confidence_threshold: float = Field(default=0.8, description="Minimum confidence score for logos")
+    confidence_threshold: float = Field(
+        default=0.8, description="Minimum confidence score for logos"
+    )
 
     # Caching
     cache_duration_days: int = Field(default=1, description="Cache duration in days")

@@ -20,6 +20,7 @@ class TestLogoCrawlerInit:
         """Test initialization fails without API key (v0.2.0 behavior)."""
         # In v0.2.0, pydantic validates required fields
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             LogoCrawler(api_key=None)
 
@@ -31,9 +32,7 @@ class TestLogoCrawlerInit:
 
         # Should work with endpoint
         crawler = LogoCrawler(
-            api_key=mock_api_key,
-            use_azure=True,
-            azure_endpoint="https://test.openai.azure.com"
+            api_key=mock_api_key, use_azure=True, azure_endpoint="https://test.openai.azure.com"
         )
         assert crawler.use_azure is True
         assert crawler.config.azure_endpoint == "https://test.openai.azure.com"
