@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2025-11-23
+
+### Fixed
+- **CRITICAL:** Fixed development status classifier from "Beta" to "Alpha" in pyproject.toml (was inconsistent with README)
+- Removed tracked test artifact `results_city_map.json` from git (was committed before .gitignore rule)
+
+### Changed
+- Package metadata now correctly reflects Alpha status consistently across README and pyproject.toml
+
 ## [0.1.4] - 2025-11-22
 
 ### Fixed
