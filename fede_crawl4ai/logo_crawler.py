@@ -1,12 +1,10 @@
-import asyncio
 import os
 import csv
 import logging
-from typing import List, Dict, Optional, Set, Tuple
+from typing import List, Dict, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 import hashlib
 from datetime import datetime, timedelta
-import urllib.request
 import json
 import base64
 import cairosvg
@@ -100,7 +98,7 @@ class CloudStorage:
             file_path = f"background-removed/{filename}"
 
             # Ensure bucket exists (this would need to be created manually in Supabase dashboard)
-            result = self.client.storage.from_(bucket_name).upload(
+            self.client.storage.from_(bucket_name).upload(
                 path=file_path, file=image_data, file_options={"content-type": "image/png"}
             )
 
