@@ -51,6 +51,16 @@ dev = [
     "flake8>=6.0.0",
     "mypy>=1.5.0",
 ]
+background-removal = [
+    "rembg>=2.0.0",
+]
+cloud-storage = [
+    "supabase>=2.0.0",
+]
+all = [
+    "rembg>=2.0.0",
+    "supabase>=2.0.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["fede_crawl4ai"]
