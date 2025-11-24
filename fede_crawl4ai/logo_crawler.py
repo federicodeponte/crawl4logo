@@ -20,6 +20,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 
 from .config import LogoCrawlerConfig
 from .models import LogoResult
+from .storage import ImageCache, CloudStorage
 
 logger = logging.getLogger(__name__)
 
@@ -41,63 +42,8 @@ except ImportError:
 
 # Removed: logo_detection module (dead code - detection strategies were never executed)
 # Removed: allowSelfSignedHttps (security vulnerability - SSL verification should not be disabled)
-
-
-class ImageCache:
-    def __init__(self, cache_duration: timedelta = timedelta(days=1)):
-        self.cache: Dict[str, LogoResult] = {}
-        self.cache_duration = cache_duration
-
-    def get(self, image_hash: str) -> Optional[LogoResult]:
-        if image_hash in self.cache:
-            result = self.cache[image_hash]
-            if datetime.now() - result.timestamp < self.cache_duration:
-                return result
-        return None
-
-    def set(self, image_hash: str, result: LogoResult):
-        self.cache[image_hash] = result
-
-
-class CloudStorage:
-    def __init__(self, supabase_url: Optional[str] = None, supabase_key: Optional[str] = None):
-        """Initialize cloud storage for uploading background-removed images."""
-        self.supabase_url = supabase_url
-        self.supabase_key = supabase_key
-        self.client: Optional[Client] = None
-
-        if SUPABASE_AVAILABLE and supabase_url and supabase_key:
-            try:
-                self.client = create_client(supabase_url, supabase_key)
-                logger.info("Supabase cloud storage initialized")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Supabase: {e}")
-                self.client = None
-        else:
-            pass  # Supabase not configured (optional feature)
-
-    async def upload_image(self, image_data: bytes, filename: str) -> Optional[str]:
-        """Upload image to cloud storage and return public URL."""
-        if not self.client:
-            return None
-
-        try:
-            # Upload to Supabase storage
-            bucket_name = "logo-images"
-            file_path = f"background-removed/{filename}"
-
-            # Ensure bucket exists (this would need to be created manually in Supabase dashboard)
-            self.client.storage.from_(bucket_name).upload(
-                path=file_path, file=image_data, file_options={"content-type": "image/png"}
-            )
-
-            # Get public URL
-            public_url = self.client.storage.from_(bucket_name).get_public_url(file_path)
-            return public_url
-
-        except Exception as e:
-            logger.warning(f"Failed to upload to cloud storage: {e}")
-            return None
+# Removed: ImageCache class (extracted to storage/cache.py)
+# Removed: CloudStorage class (extracted to storage/cloud.py)
 
 
 class LogoCrawler:
@@ -160,8 +106,10 @@ class LogoCrawler:
 
         # Initialize image cache and cloud storage
         cache_duration = timedelta(days=self.config.cache_duration_days)
-        self.image_cache = ImageCache(cache_duration=cache_duration)
-        self.cloud_storage = CloudStorage(self.config.supabase_url, self.config.supabase_key)
+        self.image_cache = ImageCache(ttl=cache_duration)
+        self.cloud_storage = CloudStorage(
+            url=self.config.supabase_url, key=self.config.supabase_key
+        )
 
         # Minimum image dimensions (from config)
         self.min_width = self.config.min_width
@@ -1155,7 +1103,7 @@ class LogoCrawler:
                                             img_bytes = img_byte_arr.getvalue()
 
                                             # Upload to cloud storage
-                                            cloud_url = await self.cloud_storage.upload_image(
+                                            cloud_url = await self.cloud_storage.upload(
                                                 img_bytes, image_filename
                                             )
 
