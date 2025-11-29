@@ -22,8 +22,11 @@ import io
 from datetime import datetime
 from pydantic import BaseModel
 
-# Configure pytesseract path if needed
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# Configure pytesseract path - use shutil.which to find it, or env var
+import shutil
+_tesseract_path = os.environ.get('TESSERACT_CMD') or shutil.which('tesseract')
+if _tesseract_path:
+    pytesseract.pytesseract.tesseract_cmd = _tesseract_path
 
 def extract_domain(url: str) -> str:
     """Extract domain name from URL."""

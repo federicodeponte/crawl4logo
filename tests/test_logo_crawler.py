@@ -4,7 +4,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
-from fede_crawl4ai import LogoCrawler
+from crawl4logo import LogoCrawler
 
 print("Script started")  # Debug output
 

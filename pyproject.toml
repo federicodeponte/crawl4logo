@@ -16,6 +16,15 @@ dependencies = [
     "pydantic>=2.0.0",
     "rich>=10.0.0",
     "cairosvg>=2.7.0",
+    # detection.py dependencies
+    "python-magic>=0.4.27",
+    "opencv-python>=4.5.0",
+    "extcolors>=1.0.0",
+    "pytesseract>=0.3.10",
+    "imagehash>=4.3.0",
+    "tweepy>=4.14.0",
+    "jsonschema>=4.0.0",
+    "scikit-learn>=1.0.0",
 ]
 readme = "README.md"
 requires-python = ">=3.9"
@@ -25,6 +34,10 @@ ai = ["openai>=1.0.0"]
 rembg = ["rembg>=2.0.0"]
 supabase = ["supabase>=2.0.0"]
 all = ["openai>=1.0.0", "rembg>=2.0.0", "supabase>=2.0.0"]
+dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/crawl4logo"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/crawl4logo"]

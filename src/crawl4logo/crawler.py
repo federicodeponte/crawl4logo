@@ -40,6 +40,20 @@ except ImportError:
 
 from .detection import LogoDetectionStrategies, LogoCandidate
 
+# Browser-like headers to avoid 403 blocks from websites
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"macOS"',
+}
+
 def allowSelfSignedHttps(allowed):
     if allowed and not os.environ.get('PYTHONHTTPSVERIFY', '') and getattr(ssl, '_create_unverified_context', None):
         ssl._create_default_https_context = ssl._create_unverified_context
@@ -523,7 +537,7 @@ class LogoCrawler:
         """Analyze an image using gpt-4o-mini to determine if it's a logo."""
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as response:
+                async with session.get(image_url, headers=BROWSER_HEADERS) as response:
                     if response.status != 200:
                         return None
                     
@@ -598,7 +612,7 @@ class LogoCrawler:
         async def process_page(url: str):
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as response:
+                    async with session.get(url, headers=BROWSER_HEADERS) as response:
                         if response.status != 200:
                             return
                         
@@ -831,7 +845,7 @@ class LogoCrawler:
         """Crawl a website and find logos."""
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
+                async with session.get(url, headers=BROWSER_HEADERS) as response:
                     if response.status != 200:
                         return []
                     
@@ -1034,7 +1048,7 @@ class LogoCrawler:
                             try:
                                 # Download the original image
                                 async with aiohttp.ClientSession() as session:
-                                    async with session.get(result.url) as response:
+                                    async with session.get(result.url, headers=BROWSER_HEADERS) as response:
                                         if response.status == 200:
                                             image_data = await response.read()
                                             image = Image.open(io.BytesIO(image_data))
