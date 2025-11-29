@@ -20,23 +20,21 @@ from pydantic import BaseModel
 import re
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
-# Try to import rembg for background removal
+# Optional: rembg for background removal
 try:
     from rembg import remove
     REMBG_AVAILABLE = True
 except ImportError:
     REMBG_AVAILABLE = False
-    print("Warning: rembg not installed. Background removal will be skipped.")
-    print("Install with: pip install rembg")
+    remove = None  # type: ignore
 
-# Try to import supabase for cloud storage
+# Optional: supabase for cloud storage
 try:
     from supabase import create_client, Client
     SUPABASE_AVAILABLE = True
 except ImportError:
     SUPABASE_AVAILABLE = False
-    print("Warning: supabase not installed. Cloud storage will be skipped.")
-    print("Install with: pip install supabase")
+    Client = None  # type: ignore
 
 from .detection import LogoDetectionStrategies, LogoCandidate
 
