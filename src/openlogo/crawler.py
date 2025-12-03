@@ -39,6 +39,33 @@ except ImportError:
 from .detection import LogoDetectionStrategies, LogoCandidate
 
 
+async def try_clearbit_logo(domain: str, website_url: str) -> Optional["LogoResult"]:
+    """Try to get logo from Clearbit API (free, fast, high quality).
+    
+    Clearbit provides curated company logos for most established companies.
+    Returns None if Clearbit doesn't have the logo (404) or on any error.
+    """
+    clearbit_url = f"https://logo.clearbit.com/{domain}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.head(clearbit_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status == 200:
+                    print(f"✅ Clearbit logo found for {domain}: {clearbit_url}")
+                    return LogoResult(
+                        url=clearbit_url,
+                        confidence=0.95,
+                        description="Logo from Clearbit API",
+                        page_url=website_url,
+                        image_hash=hashlib.md5(clearbit_url.encode()).hexdigest(),
+                        timestamp=datetime.now(),
+                        is_header=True,
+                        rank_score=2.0,
+                    )
+    except Exception as e:
+        print(f"ℹ️  Clearbit unavailable for {domain}: {e}")
+    return None
+
+
 def extract_meta_refresh_url(html: str, base_url: str) -> Optional[str]:
     """Extract redirect URL from meta http-equiv="refresh" tag.
 
@@ -870,8 +897,24 @@ class LogoCrawler:
             print(f"Error during logo ranking: {e}")
             return logos
 
-    async def crawl_website(self, url: str) -> List[LogoResult]:
-        """Crawl a website and find logos."""
+    async def crawl_website(self, url: str, skip_clearbit: bool = False) -> List[LogoResult]:
+        """Crawl a website and find logos.
+        
+        Args:
+            url: Website URL to crawl
+            skip_clearbit: If True, skip Clearbit API and go straight to crawling
+        """
+        # Extract domain for Clearbit lookup
+        domain = urlparse(url).netloc.replace("www.", "")
+        
+        # Try Clearbit first (free, fast, reliable for established companies)
+        if not skip_clearbit:
+            clearbit_result = await try_clearbit_logo(domain, url)
+            if clearbit_result:
+                print(f"🚀 Using Clearbit logo for {domain} (skipping crawl)")
+                return [clearbit_result]
+            print(f"ℹ️  Clearbit unavailable for {domain}, falling back to crawler...")
+        
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=BROWSER_HEADERS) as response:

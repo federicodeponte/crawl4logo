@@ -1,13 +1,14 @@
 # openlogo
 
-A web crawler for logo detection using GPT-4o-mini vision. Crawls websites and identifies logos with confidence scores.
+A web crawler for logo detection using GPT-4o-mini vision. **Prioritizes Clearbit API** for instant logos (~100ms), falls back to AI-powered crawling for companies not in Clearbit's database.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
+- ⚡ **Clearbit API priority** - Instant logos for established companies (free, ~100ms)
 - 🔍 Async web crawling with browser-like headers (avoids 403 blocks)
-- 🤖 Logo detection using GPT-4o-mini vision
+- 🤖 Logo detection using GPT-4o-mini vision (fallback)
 - 🔄 Meta refresh redirect support (follows `<meta http-equiv="refresh">` redirects)
 - 🖼️ SVG to PNG conversion
 - 📊 Confidence scores and descriptions
@@ -112,6 +113,12 @@ LogoResult(
 ```
 
 ## Changelog
+
+### v0.4.0
+- **Clearbit API priority** - Now tries Clearbit first for instant logos (~100ms, free)
+- Falls back to GPT-4o-mini crawler only when Clearbit returns 404
+- Added `skip_clearbit` parameter to `crawl_website()` for forcing crawler mode
+- Exported `try_clearbit_logo()` for direct use
 
 ### v0.3.0
 - Renamed package from `crawl4logo` to `openlogo`
